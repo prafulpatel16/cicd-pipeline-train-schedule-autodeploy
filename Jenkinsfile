@@ -1,7 +1,6 @@
 pipeline {
     agent any
     environment {
-        //be sure to replace "willbla" with your own Docker Hub username
         DOCKER_IMAGE_NAME = "praful2018/train-schedule"
     }
     stages {
@@ -42,37 +41,55 @@ pipeline {
             when {
                 branch 'master'
             }
-            environment { 
+            environment {
                 CANARY_REPLICAS = 1
             }
             steps {
-                kubernetesDeploy(
-                    kubeconfigId: 'kubeconfig',
-                    configs: 'train-schedule-kube-canary.yml',
-                    enableConfigSubstitution: true
-                )
+                script {
+                    try {
+                        kubernetesDeploy(
+                            kubeconfigId: 'kubeconfig',
+                            configs: 'train-schedule-kube-canary.yml',
+                            enableConfigSubstitution: true
+                        )
+                    } catch (Exception deployException) {
+                        echo "Canary Deployment Failed: ${deployException.message}"
+                        // Handle the exception as needed
+                        currentBuild.result = 'FAILURE'
+                        error("Canary Deployment Failed")
+                    }
+                }
             }
         }
         stage('DeployToProduction') {
             when {
                 branch 'master'
             }
-            environment { 
+            environment {
                 CANARY_REPLICAS = 0
             }
             steps {
-                input 'Deploy to Production?'
-                milestone(1)
-                kubernetesDeploy(
-                    kubeconfigId: 'kubeconfig',
-                    configs: 'train-schedule-kube-canary.yml',
-                    enableConfigSubstitution: true
-                )
-                kubernetesDeploy(
-                    kubeconfigId: 'kubeconfig',
-                    configs: 'train-schedule-kube.yml',
-                    enableConfigSubstitution: true
-                )
+                script {
+                    try {
+                        input 'Deploy to Production?'
+                        milestone(1)
+                        kubernetesDeploy(
+                            kubeconfigId: 'kubeconfig',
+                            configs: 'train-schedule-kube-canary.yml',
+                            enableConfigSubstitution: true
+                        )
+                        kubernetesDeploy(
+                            kubeconfigId: 'kubeconfig',
+                            configs: 'train-schedule-kube.yml',
+                            enableConfigSubstitution: true
+                        )
+                    } catch (Exception deployException) {
+                        echo "Production Deployment Failed: ${deployException.message}"
+                        // Handle the exception as needed
+                        currentBuild.result = 'FAILURE'
+                        error("Production Deployment Failed")
+                    }
+                }
             }
         }
     }
